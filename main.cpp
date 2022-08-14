@@ -8,9 +8,14 @@
 #include <linux/if.h>
 #include <netdb.h>
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 
+#include <sys/types.h>
+#include <ifaddrs.h>
+#include <netinet/in.h> 
+#include <string.h> 
+#include <arpa/inet.h>
+#include<linux/sockios.h>
 
 
 #pragma pack(push, 1)
@@ -25,34 +30,44 @@ void usage() {
 	printf("sample: send-arp-test wlan0\n");
 }
 
-void getMacAddress()
+
+char* getIpAddress(){
+	 int fd;
+	 struct ifreq ifr;
+	 fd = socket(AF_INET, SOCK_DGRAM, 0);
+	 ifr.ifr_addr.sa_family = AF_INET; //get IPv4
+	 strncpy(ifr.ifr_name, "enp0s3", IFNAMSIZ-1); //ip attatce to enp0s3
+
+	 ioctl(fd, SIOCGIFADDR, &ifr);
+	 close(fd);
+	 return inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
+}
+
+ char* getMacAddress()
 {
 	  struct ifreq s;
 	  int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
 	  char* mac ;	
 	  strcpy(s.ifr_name, "enp0s3");
-	  printf("\n");
-	  if (0 == ioctl(fd, SIOCGIFHWADDR, &s)) {
-	    int i;
-	//    mac = s->ifr_addr->sa_data;
-	    for (i = 0; i < 6; ++i){	    
-	      unsigned char tempMac =(unsigned char) s.ifr_addr.sa_data[i];
-	  //    strcat(mac,tempMac);
-	      printf(" %02x", (unsigned char) s.ifr_addr.sa_data[i]);
-	      if (i!=5) printf(":");}
-	  printf("\n");
-	  }
+	  ioctl(fd, SIOCGIFHWADDR, &s);
+	  mac = reinterpret_cast<char *>(s.ifr_addr.sa_data);
+    
+    sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x", 
+    (unsigned char)s.ifr_hwaddr.sa_data[0],
+    (unsigned char)s.ifr_hwaddr.sa_data[1],
+    (unsigned char)s.ifr_hwaddr.sa_data[2],
+    (unsigned char)s.ifr_hwaddr.sa_data[3],
+    (unsigned char)s.ifr_hwaddr.sa_data[4],
+    (unsigned char)s.ifr_hwaddr.sa_data[5]);
+
 	  close(fd);
+	  return mac;
 }
 
 
 int sendArpRequest(char* sender_ip, char* target_ip, pcap_t* handle){
 	
 	EthArpPacket packet;
-	//get mac address
-
-	getMacAddress();
-	//printf("%s", &mac);
 	packet.eth_.dmac_ = Mac("ff:ff:ff:ff:ff:ff");
 	packet.eth_.smac_ = Mac("08:00:27:32:d5:9a");
 	packet.eth_.type_ = htons(EthHdr::Arp);
@@ -93,12 +108,12 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "couldn't open device %s(%s)\n", dev, errbuf);
 		return -1;
 	}
-	
+	//get ip address
+	printf("%s\n",getIpAddress());
+	printf("%s\n",getMacAddress());
+
+    
 	int request_result = sendArpRequest(sender_ip, target_ip, handle);
-	/*if(request_result==-1){
-		fprintf(stderr, "couldn't open device %s(%s)\n", dev, errbuf);
-		return -1;
-	}*/
 	
 }
 
