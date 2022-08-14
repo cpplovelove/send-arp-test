@@ -3,14 +3,12 @@
 #include "ethhdr.h"
 #include "arphdr.h"
 #include "ip.h"
-
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <linux/if.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <unistd.h>
-
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <netinet/in.h> 
@@ -44,7 +42,7 @@ char* getIpAddress(){
 	 return inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
 }
 
- char* getMacAddress()
+ Mac getMacAddress()
 {
 	struct ifreq s;
 	int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
@@ -62,30 +60,14 @@ char* getIpAddress(){
 	(unsigned char)s.ifr_hwaddr.sa_data[5]);
 
 	close(fd);
-	return mac;
+	return Mac(mac);
 }
 
 
-int sendRequest(char* myIp, char* myMac, char* sender_ip, pcap_t* handle){
-	struct ifreq s;
-	int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
-	char* mac ;	
-	strcpy(s.ifr_name, "enp0s3");
-	ioctl(fd, SIOCGIFHWADDR, &s);
-	mac = reinterpret_cast<char *>(s.ifr_addr.sa_data);
-
-	sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x", 
-	(unsigned char)s.ifr_hwaddr.sa_data[0],
-	(unsigned char)s.ifr_hwaddr.sa_data[1],
-	(unsigned char)s.ifr_hwaddr.sa_data[2],
-	(unsigned char)s.ifr_hwaddr.sa_data[3],
-	(unsigned char)s.ifr_hwaddr.sa_data[4],
-	(unsigned char)s.ifr_hwaddr.sa_data[5]);
-	
-	
+int sendRequest(char* myIp, Mac myMac, char* sender_ip, pcap_t* handle){	
 	EthArpPacket packet;
 	packet.eth_.dmac_ = Mac("ff:ff:ff:ff:ff:ff"); //unknown mac
-	packet.eth_.smac_ = Mac(mac); //source mac (my mac)
+	packet.eth_.smac_ = myMac; //source mac (my mac)
 	packet.eth_.type_ = htons(EthHdr::Arp);
 
 	packet.arp_.hrd_ = htons(ArpHdr::ETHER);
@@ -94,9 +76,8 @@ int sendRequest(char* myIp, char* myMac, char* sender_ip, pcap_t* handle){
 	packet.arp_.pln_ = Ip::SIZE;
 	packet.arp_.op_ = htons(ArpHdr::Request);
 	
-	printf("%s",myMac);
 	
-	packet.arp_.smac_ = Mac(mac); // source mac(my mac)
+	packet.arp_.smac_ = myMac; // source mac(my mac)
 	packet.arp_.sip_ = htonl(Ip(myIp)); // source ip ( sender ip )
 	packet.arp_.tmac_ = Mac("00:00:00:00:00:00");// target mac
 	packet.arp_.tip_ = htonl(Ip(sender_ip));
@@ -114,25 +95,9 @@ int sendRequest(char* myIp, char* myMac, char* sender_ip, pcap_t* handle){
 }
 
 
-Mac getSenderMac(char* dev,char* senderIP){
-    struct ifreq s;
-	int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
-	char* mac ;	
-	strcpy(s.ifr_name, "enp0s3");
-	ioctl(fd, SIOCGIFHWADDR, &s);
-	mac = reinterpret_cast<char *>(s.ifr_addr.sa_data);
-
-	sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x", 
-	(unsigned char)s.ifr_hwaddr.sa_data[0],
-	(unsigned char)s.ifr_hwaddr.sa_data[1],
-	(unsigned char)s.ifr_hwaddr.sa_data[2],
-	(unsigned char)s.ifr_hwaddr.sa_data[3],
-	(unsigned char)s.ifr_hwaddr.sa_data[4],
-	(unsigned char)s.ifr_hwaddr.sa_data[5]);
-
+Mac getSenderMac(char* dev,char* senderIP,Mac myMac){
+    
 	char errbuf[PCAP_ERRBUF_SIZE];
-	
-
     pcap_t* pcap = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
 	if (pcap == NULL) {
 		fprintf(stderr, "pcap_open_live(%s) return null - %s\n", dev, errbuf);
@@ -166,7 +131,7 @@ Mac getSenderMac(char* dev,char* senderIP){
 		
 		printf("%04x\n", eth_type);
 		if (eth_type == 0x0806){
-			if(dmac==Mac(mac) && sip==Ip(senderIP))
+			if(dmac==myMac && sip==Ip(senderIP))
 				return smac;
 			printf("%04x\n", eth_type);
 			printf("%02x\n", op_type);		
@@ -178,28 +143,14 @@ Mac getSenderMac(char* dev,char* senderIP){
 }
 
 
-void sendArpRequest(char* dev, Mac smac, char* gatewayIp, char* senderIp){
-	 struct ifreq s;
-	int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
-	char* mac ;	
-	strcpy(s.ifr_name, "enp0s3");
-	ioctl(fd, SIOCGIFHWADDR, &s);
-	mac = reinterpret_cast<char *>(s.ifr_addr.sa_data);
-
-	sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x", 
-	(unsigned char)s.ifr_hwaddr.sa_data[0],
-	(unsigned char)s.ifr_hwaddr.sa_data[1],
-	(unsigned char)s.ifr_hwaddr.sa_data[2],
-	(unsigned char)s.ifr_hwaddr.sa_data[3],
-	(unsigned char)s.ifr_hwaddr.sa_data[4],
-	(unsigned char)s.ifr_hwaddr.sa_data[5]);
+void sendArpRequest(char* dev, Mac myMac, Mac smac, char* gatewayIp, char* senderIp){
 
 	char errbuf[PCAP_ERRBUF_SIZE];
 	pcap_t* handle = pcap_open_live(dev, 0, 0, 0, errbuf);
 	EthArpPacket packet;
 
 	packet.eth_.dmac_ = smac; // sender mac
-	packet.eth_.smac_ = Mac(mac); // my mac
+	packet.eth_.smac_ = myMac; // my mac
 	packet.eth_.type_ = htons(EthHdr::Arp);
 
 	packet.arp_.hrd_ = htons(ArpHdr::ETHER);
@@ -207,7 +158,7 @@ void sendArpRequest(char* dev, Mac smac, char* gatewayIp, char* senderIp){
 	packet.arp_.hln_ = Mac::SIZE;
 	packet.arp_.pln_ = Ip::SIZE;
 	packet.arp_.op_ = htons(ArpHdr::Reply);
-	packet.arp_.smac_ = Mac(mac); //my mac 
+	packet.arp_.smac_ = myMac; //my mac 
 	packet.arp_.sip_ = htonl(Ip(gatewayIp)); //gateway ip
 	packet.arp_.tmac_ = smac; //sender mac
 	packet.arp_.tip_ = htonl(Ip(senderIp)); //sender ip 
@@ -240,16 +191,12 @@ int main(int argc, char* argv[]) {
 	}
 	//get ip address
 	char* myIp = getIpAddress();
-	char* myMacAddress = getMacAddress();
+	Mac myMacAddress = getMacAddress();
 
-	
-	printf("%s\n",myIp);
-	printf("%s",myMacAddress);
-    
 	int request_result = sendRequest(myIp, myMacAddress, sender_ip, handle);
 	
-	Mac sender_mac = getSenderMac(dev, sender_ip);
-	sendArpRequest(dev,sender_mac,target_ip,sender_ip);
+	Mac sender_mac = getSenderMac(dev, sender_ip,myMacAddress);
+	sendArpRequest(dev,myMacAddress,sender_mac,target_ip,sender_ip);
 }
 
 
