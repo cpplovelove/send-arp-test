@@ -52,7 +52,7 @@ char* getIpAddress(){
 	  ioctl(fd, SIOCGIFHWADDR, &s);
 	  mac = reinterpret_cast<char *>(s.ifr_addr.sa_data);
     
-    sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x", 
+    sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x\n\n", 
     (unsigned char)s.ifr_hwaddr.sa_data[0],
     (unsigned char)s.ifr_hwaddr.sa_data[1],
     (unsigned char)s.ifr_hwaddr.sa_data[2],
@@ -109,9 +109,13 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 	//get ip address
-	printf("%s\n",getIpAddress());
-	printf("%s\n",getMacAddress());
+	char* myIp = getIpAddress();
+	char* myMacAddress = getMacAddress();
 
+	
+	printf("%s",myIp);
+	printf("%s",myMacAddress);
+	
     
 	int request_result = sendArpRequest(sender_ip, target_ip, handle);
 	
