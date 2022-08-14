@@ -30,24 +30,24 @@ void usage() {
 }
 
 
-char* getIpAddress(){
+char* getIpAddress(char* dev){
 	 int fd;
 	 struct ifreq ifr;
 	 fd = socket(AF_INET, SOCK_DGRAM, 0);
 	 ifr.ifr_addr.sa_family = AF_INET; //get IPv4
-	 strncpy(ifr.ifr_name, "enp0s3", IFNAMSIZ-1); //ip attatce to enp0s3
+	 strncpy(ifr.ifr_name, dev, IFNAMSIZ-1); //ip attatce to enp0s3
 
 	 ioctl(fd, SIOCGIFADDR, &ifr);
 	 close(fd);
 	 return inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
 }
 
- Mac getMacAddress()
+ Mac getMacAddress(char* dev)
 {
 	struct ifreq s;
 	int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
 	char* mac ;	
-	strcpy(s.ifr_name, "enp0s3");
+	strcpy(s.ifr_name, dev);
 	ioctl(fd, SIOCGIFHWADDR, &s);
 	mac = reinterpret_cast<char *>(s.ifr_addr.sa_data);
 
@@ -76,14 +76,10 @@ int sendRequest(char* myIp, Mac myMac, char* sender_ip, pcap_t* handle){
 	packet.arp_.pln_ = Ip::SIZE;
 	packet.arp_.op_ = htons(ArpHdr::Request);
 	
-	
 	packet.arp_.smac_ = myMac; // source mac(my mac)
 	packet.arp_.sip_ = htonl(Ip(myIp)); // source ip ( sender ip )
 	packet.arp_.tmac_ = Mac("00:00:00:00:00:00");// target mac
 	packet.arp_.tip_ = htonl(Ip(sender_ip));
-
-
-
 
 	int res = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
 	if (res != 0) {
@@ -112,9 +108,6 @@ Mac getSenderMac(char* dev,char* senderIP,Mac myMac){
 			printf("pcap_next_ex return %d(%s)\n", res, pcap_geterr(pcap));
 			break;
 		}
-		printf("\n\n\n%u bytes captured\n", header->caplen);
-
-		
 		struct EthHdr *eth;
 		struct ArpHdr *arp_h;
 			
@@ -129,12 +122,9 @@ Mac getSenderMac(char* dev,char* senderIP,Mac myMac){
 		Ip sip = arp_h -> sip();
 		Ip tip = arp_h -> tip();
 		
-		printf("%04x\n", eth_type);
-		if (eth_type == 0x0806){
+		if (eth_type == 0x0806 && op_type==0x02){
 			if(dmac==myMac && sip==Ip(senderIP))
 				return smac;
-			printf("%04x\n", eth_type);
-			printf("%02x\n", op_type);		
 		}	 
 		
 	}
@@ -189,16 +179,13 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "couldn't open device %s(%s)\n", dev, errbuf);
 		return -1;
 	}
-	//get ip address
-	char* myIp = getIpAddress();
-	Mac myMacAddress = getMacAddress();
+	char* myIp = getIpAddress(dev);
+	Mac myMacAddress = getMacAddress(dev);
 
 	int request_result = sendRequest(myIp, myMacAddress, sender_ip, handle);
 	
 	Mac sender_mac = getSenderMac(dev, sender_ip,myMacAddress);
 	sendArpRequest(dev,myMacAddress,sender_mac,target_ip,sender_ip);
 }
-
-
 
 
